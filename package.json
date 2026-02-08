@@ -1,16 +1,17 @@
 {
-  "name": "bot-checkout-cleaner",
+  "name": "bot-checkout-cleaner-api",
   "version": "1.0.0",
-  "description": "Shopify app to detect and clean bot abandoned checkouts",
+  "description": "Shopify bot detection and cleanup API",
   "main": "server.js",
+  "type": "module",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "dev": "node server.js"
   },
   "dependencies": {
     "express": "^4.18.2",
-    "dotenv": "^16.3.1",
-    "node-fetch": "^2.7.0",
-    "express-session": "^1.17.3"
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1"
   },
   "engines": {
     "node": "18.x"
