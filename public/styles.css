@@ -104,3 +104,66 @@ body {
 .info-row:first-of-type {
   border-top: none;
 }
+/* ===== DARK MODE ===== */
+
+body.dark {
+  background: #0f172a;
+  color: #e5e7eb;
+}
+
+body.dark .card,
+body.dark .info {
+  background: #020617;
+  box-shadow: none;
+}
+
+body.dark .subtitle,
+body.dark .last-scan,
+body.dark .small {
+  color: #9ca3af;
+}
+
+body.dark h1,
+body.dark h2,
+body.dark h3 {
+  color: #f9fafb;
+}
+
+body.dark .primary-btn {
+  background: #22c55e;
+}
+
+body.dark .theme-btn {
+  background: #020617;
+  color: #facc15;
+}
+
+/* Dark mode icons */
+body.dark .icon.blue {
+  background: linear-gradient(135deg, #1e3a8a, #1e40af);
+  color: #bfdbfe;
+}
+
+body.dark .icon.green {
+  background: linear-gradient(135deg, #064e3b, #065f46);
+  color: #bbf7d0;
+}
+
+body.dark .icon.amber {
+  background: linear-gradient(135deg, #78350f, #92400e);
+  color: #fde68a;
+}
+
+body.dark .icon.teal {
+  background: linear-gradient(135deg, #134e4a, #115e59);
+  color: #99f6e4;
+}
+.theme-btn {
+  border: none;
+  background: white;
+  padding: 10px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 18px;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+}
