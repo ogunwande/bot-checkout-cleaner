@@ -1,25 +1,22 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>Bot Checkout Cleaner</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <link rel="stylesheet" href="styles.css" />
-</head>
-<body>
+<header class="header">
+  <div class="brand">
+    <div class="brand-icon">🛡️</div>
+    <div>
+      <h1>Bot Checkout Cleaner</h1>
+      <p class="subtitle">Protect your Shopify store from bot activity</p>
+      <p class="last-scan">🕒 Last scan: <span id="lastScan">Never</span></p>
+    </div>
+  </div>
 
-  <div class="container">
-    <header class="header">
-      <div>
-        <h1>Bot Checkout Cleaner</h1>
-        <p class="subtitle">Protect your Shopify store from bot activity</p>
-        <p class="last-scan">🕒 Last scan: <span id="lastScan">Never</span></p>
-      </div>
+  <div class="header-actions">
+    <button id="themeToggle" class="theme-btn">🌙</button>
+    <button id="runScanBtn" class="primary-btn">▶ Run Scan</button>
+  </div>
+</header>
 
-      <button id="runScanBtn" class="primary-btn">
-        ▶ Run Scan
-      </button>
-    </header>
 
     <section class="cards">
       <div class="card">
