@@ -104,3 +104,35 @@ body {
 .info-row:first-of-type {
   border-top: none;
 }
+.icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  margin-bottom: 14px;
+}
+
+/* Calm blended colors */
+.icon.blue {
+  background: linear-gradient(135deg, #e0f2fe, #dbeafe);
+  color: #2563eb;
+}
+
+.icon.amber {
+  background: linear-gradient(135deg, #fef3c7, #fde68a);
+  color: #b45309;
+}
+
+.icon.green {
+  background: linear-gradient(135deg, #dcfce7, #bbf7d0);
+  color: #15803d;
+}
+
+.icon.teal {
+  background: linear-gradient(135deg, #ccfbf1, #99f6e4);
+  color: #0f766e;
+}
+
