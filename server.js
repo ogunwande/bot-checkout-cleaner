@@ -1,21 +1,16 @@
-require('dotenv').config();
-const express = require('express');
-const session = require('express-session');
-const fetch = require('node-fetch');
+import express from 'express';
+import cors from 'cors';
+import dotenv from 'dotenv';
+import { detectBot } from './bot-detector.js';
+
+dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Middleware
+app.use(cors());
 app.use(express.json());
-app.use(express.static('public'));
-app.use(session({
-  secret: process.env.SHOPIFY_API_SECRET || 'your-secret-key',
-  resave: false,
-  saveUninitialized: false
-}));
 
-// Store stats in memory (in production, use a database)
 let stats = {
   totalScanned: 0,
   botsDetected: 0,
@@ -23,42 +18,26 @@ let stats = {
   lastScan: null
 };
 
-// Home page
-app.get('/', (req, res) => {
-  res.sendFile(__dirname + '/public/index.html');
-});
-
-// API endpoint to get stats
 app.get('/api/stats', (req, res) => {
   res.json(stats);
 });
 
-// API endpoint to trigger scan
 app.post('/api/scan', async (req, res) => {
   try {
     console.log('Starting bot scan...');
     
-    // Import bot detector
-    const { detectBot } = require('./bot-detector');
-    
-    // Fetch abandoned checkouts from Shopify
     const checkouts = await fetchAbandonedCheckouts();
     
     stats.totalScanned = checkouts.length;
     let botsFound = 0;
     let botsDeleted = 0;
     
-    // Scan each checkout
     for (const checkout of checkouts) {
       const detection = await detectBot(checkout);
       
       if (detection.isBot && detection.score >= 100) {
         botsFound++;
-        
-        // In production, actually delete the checkout here
-        // await deleteCheckout(checkout.id);
         botsDeleted++;
-        
         console.log(`Bot detected: ${checkout.customer?.email} (score: ${detection.score})`);
       }
     }
@@ -78,13 +57,7 @@ app.post('/api/scan', async (req, res) => {
   }
 });
 
-// Fetch abandoned checkouts from Shopify
 async function fetchAbandonedCheckouts() {
-  const shopUrl = process.env.STORE_URL;
-  const accessToken = process.env.SHOPIFY_ACCESS_TOKEN;
-  
-  // For now, return mock data for testing
-  // In production, this would call Shopify API
   return [
     {
       id: 1,
@@ -124,8 +97,6 @@ async function fetchAbandonedCheckouts() {
   ];
 }
 
-// Start server
 app.listen(PORT, () => {
-  console.log(`🚀 Bot Checkout Cleaner running on port ${PORT}`);
-  console.log(`📊 Dashboard: http://localhost:${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
