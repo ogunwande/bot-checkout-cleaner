@@ -1,6 +1,4 @@
-// Bot detection algorithm
-
-function detectBot(checkout) {
+export async function detectBot(checkout) {
   let totalScore = 0;
   const reasons = [];
   
@@ -115,5 +113,3 @@ function detectBotByName(firstName, lastName) {
   
   return score;
 }
-
-module.exports = { detectBot };
