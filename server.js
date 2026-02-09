@@ -49,18 +49,52 @@ app.post('/api/scan', async (req, res) => {
     let botsDeleted = 0;
     
     // Scan each checkout
-    for (const checkout of checkouts) {
-      const detection = await detectBot(checkout);
-      
-      if (detection.isBot && detection.score >= 100) {
-        botsFound++;
-        
-        // In production, actually delete the checkout here
-        // await deleteCheckout(checkout.id);
-        botsDeleted++;
-        
-        console.log(`Bot detected: ${checkout.customer?.email} (score: ${detection.score})`);
-      }
+   for (const checkout of checkouts) {
+  const detection = await detectBot(checkout);
+  
+  // LOG EVERY CHECKOUT (not just bots)
+  console.log(`Checkout: ${checkout.customer?.email} - Score: ${detection.score} - IsBot: ${detection.isBot}`);
+  console.log(`Reasons: ${detection.reasons.join(', ')}`);
+  
+  if (detection.isBot && detection.score >= 100) {
+    botsFound++;
+    
+    // In production, actually delete the checkout here
+    // await deleteCheckout(checkout.id);
+    botsDeleted++;
+    
+    console.log(`✅ Bot DELETED: ${checkout.customer?.email} (score: ${detection.score})`);
+  } else if (detection.score >= 70) {
+    console.log(`⚠️ Suspicious but below threshold: ${checkout.customer?.email} (score: ${detection.score})`);
+  }
+}
+```
+
+---
+
+### **Step 4: Save**
+
+1. Commit message: `Add detailed logging for all checkouts`
+2. Click **"Commit changes"**
+
+---
+
+### **Step 5: Wait for Redeploy & Test**
+
+1. Wait 2-3 minutes for Railway to redeploy
+2. Go to your dashboard
+3. Click **"Scan for Bots Now"**
+4. Go to Railway **Logs** tab
+5. **Look for the new detailed output**
+
+---
+
+### **Step 6: Copy the Logs Here**
+
+**After the scan, copy and paste the logs that show:**
+```
+Checkout: [email] - Score: [number] - IsBot: [true/false]
+Reasons: [list of reasons]
     }
     
     stats.botsDetected = botsFound;
