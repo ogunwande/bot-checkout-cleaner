@@ -29,9 +29,9 @@ function detectBot(checkout) {
     reasons.push(`Suspicious name pattern (score: ${nameScore})`);
   }
   
-  const isBot = totalScore >= 100;
-  const confidence = totalScore >= 150 ? 'very_high' : 
-                     totalScore >= 100 ? 'high' : 
+  const isBot = totalScore >= 70;
+  const confidence = totalScore >= 120 ? 'very_high' : 
+                     totalScore >= 90 ? 'high' : 
                      totalScore >= 70 ? 'medium' : 'low';
   
   return {
