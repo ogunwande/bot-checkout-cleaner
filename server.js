@@ -40,34 +40,24 @@ app.post('/api/scan', async (req, res) => {
     let botsDeleted = 0;
     
     for (const checkout of checkouts) {
-  try {
-    console.log('Checkout email:', checkout.customer?.email);
-    
-    const detection = await detectBot(checkout);
-    
-    console.log('Score:', detection.score);
-    console.log('Is bot:', detection.isBot);
-    console.log('Reasons:', detection.reasons.join(', '));
-    console.log('---');
-    
-    if (detection.isBot && detection.score >= 70) {
-      botsFound++;
-      botsDeleted++;
-      console.log('DELETED BOT:', checkout.customer?.email, 'Score:', detection.score);
-    }
-  } catch (error) {
-    console.log('ERROR analyzing checkout:', checkout.customer?.email);
-    console.log('Error message:', error.message);
-    console.log('Error stack:', error.stack);
-    console.log('---');
-  }
-}
-```
-      
-      if (detection.isBot && detection.score >= 70) {
-        botsFound++;
-        botsDeleted++;
-        console.log('DELETED BOT:', checkout.customer?.email, 'Score:', detection.score);
+      try {
+        console.log('Checkout email:', checkout.customer?.email);
+        
+        const detection = await detectBot(checkout);
+        
+        console.log('Score:', detection.score);
+        console.log('Is bot:', detection.isBot);
+        console.log('Reasons:', detection.reasons.join(', '));
+        console.log('---');
+        
+        if (detection.isBot && detection.score >= 70) {
+          botsFound++;
+          botsDeleted++;
+          console.log('DELETED BOT:', checkout.customer?.email, 'Score:', detection.score);
+        }
+      } catch (error) {
+        console.log('ERROR analyzing checkout:', checkout.customer?.email);
+        console.log('Error:', error.message);
       }
     }
     
@@ -87,7 +77,6 @@ app.post('/api/scan', async (req, res) => {
     
   } catch (error) {
     console.error('Scan error:', error.message);
-    console.error('Stack:', error.stack);
     res.status(500).json({ error: error.message });
   }
 });
