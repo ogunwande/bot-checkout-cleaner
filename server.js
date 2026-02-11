@@ -1,7 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const session = require('express-session');
-const { buildAuthUrl, getAccessToken, fetchAbandonedCheckoutsFromShopify, deleteCheckoutFromShopify } = require('./shopify-auth');
+const crypto = require('crypto');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -29,8 +29,9 @@ app.get('/auth', (req, res) => {
     return res.status(400).send('Missing shop parameter. Use: /auth?shop=yourstore.myshopify.com');
   }
   
+  const state = crypto.randomBytes(16).toString('hex');
   const redirectUri = `${process.env.APP_URL || 'http://localhost:3000'}/auth/callback`;
-  const { authUrl, state } = buildAuthUrl(shop, redirectUri);
+  const authUrl = `https://${shop}/admin/oauth/authorize?client_id=${process.env.SHOPIFY_API_KEY}&scope=read_checkouts,write_checkouts&state=${state}&redirect_uri=${redirectUri}`;
   
   req.session.state = state;
   req.session.shop = shop;
@@ -46,14 +47,27 @@ app.get('/auth/callback', async (req, res) => {
   }
   
   try {
-    const accessToken = await getAccessToken(shop, code);
+    const accessTokenUrl = `https://${shop}/admin/oauth/access_token`;
+    const response = await fetch(accessTokenUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        client_id: process.env.SHOPIFY_API_KEY,
+        client_secret: process.env.SHOPIFY_API_SECRET,
+        code: code
+      })
+    });
+
+    const data = await response.json();
     
-    req.session.accessToken = accessToken;
-    req.session.shop = shop;
-    
-    console.log('Successfully authenticated store:', shop);
-    
-    res.redirect('/');
+    if (data.access_token) {
+      req.session.accessToken = data.access_token;
+      req.session.shop = shop;
+      console.log('Successfully authenticated store:', shop);
+      res.redirect('/');
+    } else {
+      res.status(500).send('Failed to get access token');
+    }
   } catch (error) {
     console.error('OAuth error:', error);
     res.status(500).send('Authentication failed: ' + error.message);
@@ -72,18 +86,7 @@ app.post('/api/scan', async (req, res) => {
   try {
     console.log('=== Starting bot scan ===');
     
-    const { detectBot } = require('./bot-detector');
-    
-    let checkouts;
-    
-    if (req.session.accessToken && req.session.shop) {
-      console.log('Fetching real checkouts from:', req.session.shop);
-      checkouts = await fetchAbandonedCheckoutsFromShopify(req.session.shop, req.session.accessToken);
-      console.log('Fetched', checkouts.length, 'real checkouts from Shopify');
-    } else {
-      console.log('No store connected - using test data');
-      checkouts = await fetchTestCheckouts();
-    }
+    const checkouts = await fetchTestCheckouts();
     
     stats.totalScanned = checkouts.length;
     let botsFound = 0;
@@ -130,6 +133,43 @@ app.post('/api/scan', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+// Bot detection function
+async function detectBot(checkout) {
+  let score = 0;
+  const reasons = [];
+
+  const email = checkout.email || checkout.customer?.email || '';
+  const firstName = checkout.customer?.first_name || '';
+  const lastName = checkout.customer?.last_name || '';
+  const address = checkout.shipping_address?.address1 || '';
+
+  if (/\d{3,}@/.test(email)) {
+    score += 30;
+    reasons.push('Email has 3+ numbers');
+  }
+  
+  if (/^[a-z]+\d+@gmail\.com$/i.test(email)) {
+    score += 25;
+    reasons.push('Generic Gmail pattern');
+  }
+
+  if (/\d/.test(firstName) || /\d/.test(lastName)) {
+    score += 20;
+    reasons.push('Name has numbers');
+  }
+
+  if (/house number|apartment|apt \d+|street \d+/i.test(address)) {
+    score += 15;
+    reasons.push('Generic address');
+  }
+
+  return {
+    isBot: score >= 40,
+    score: score,
+    reasons: reasons
+  };
+}
 
 async function fetchTestCheckouts() {
   return [
