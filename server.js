@@ -172,4 +172,3 @@ async function fetchTestCheckouts() {
 app.listen(PORT, () => {
   console.log('Bot Checkout Cleaner running on port', PORT);
 });
-```
