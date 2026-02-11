@@ -29,7 +29,7 @@ app.get('/auth', (req, res) => {
   const shop = req.query.shop;
   
   if (!shop) {
-    return res.status(400).send('Missing shop parameter. Use: /auth?shop=yourstore.myshopify.com');
+    return res.status(400).send('Missing shop parameter');
   }
   
   const state = crypto.randomBytes(16).toString('hex');
@@ -64,20 +64,17 @@ app.get('/auth/callback', async (req, res) => {
     const data = await response.json();
     
     if (data.access_token) {
-      // SAVE THE TOKEN
       await saveToken(shop, data.access_token);
-      
       req.session.accessToken = data.access_token;
       req.session.shop = shop;
-      
-      console.log('Successfully authenticated and saved token for:', shop);
+      console.log('Token saved for:', shop);
       res.redirect('/');
     } else {
       res.status(500).send('Failed to get access token');
     }
   } catch (error) {
     console.error('OAuth error:', error);
-    res.status(500).send('Authentication failed: ' + error.message);
+    res.status(500).send('Authentication failed');
   }
 });
 
@@ -88,11 +85,7 @@ app.get('/', (req, res) => {
 app.get('/api/stats', (req, res) => {
   res.json(stats);
 });
-app.get('/api/stats', (req, res) => {
-  res.json(stats);
-});
 
-// ADD THIS NEW ENDPOINT
 app.get('/api/debug-tokens', async (req, res) => {
   try {
     const { getTokens } = require('./token-store');
@@ -108,16 +101,13 @@ app.get('/api/debug-tokens', async (req, res) => {
 });
 
 app.post('/api/scan', async (req, res) => {
-
-app.post('/api/scan', async (req, res) => {
   try {
     console.log('=== Starting bot scan ===');
     
     let checkouts;
-    let shop = req.session.shop || 'eleven45ventures.myshopify.com'; // Default to your store
+    let shop = req.session.shop || 'eleven45ventures.myshopify.com';
     let accessToken = req.session.accessToken;
     
-    // Try to get stored token if not in session
     if (!accessToken) {
       console.log('No token in session, checking storage...');
       accessToken = await getToken(shop);
@@ -157,7 +147,6 @@ app.post('/api/scan', async (req, res) => {
         if (detection.isBot && detection.score >= 70) {
           botsFound++;
           
-          // ACTUALLY DELETE THE CHECKOUT
           if (accessToken && shop && checkout.token) {
             const deleted = await deleteCheckout(shop, accessToken, checkout.token);
             if (deleted) {
@@ -193,7 +182,6 @@ app.post('/api/scan', async (req, res) => {
   }
 });
 
-// Bot detection function
 async function detectBot(checkout) {
   let score = 0;
   const reasons = [];
@@ -205,17 +193,17 @@ async function detectBot(checkout) {
 
   if (/\d{3,}@/.test(email)) {
     score += 30;
-    reasons.push('Email has 3+ numbers');
+    reasons.push('Email numbers');
   }
   
   if (/^[a-z]+\d+@gmail\.com$/i.test(email)) {
     score += 25;
-    reasons.push('Generic Gmail pattern');
+    reasons.push('Gmail pattern');
   }
 
   if (/\d/.test(firstName) || /\d/.test(lastName)) {
     score += 20;
-    reasons.push('Name has numbers');
+    reasons.push('Name numbers');
   }
 
   if (/house number|apartment|apt \d+|street \d+/i.test(address)) {
@@ -223,11 +211,7 @@ async function detectBot(checkout) {
     reasons.push('Generic address');
   }
 
-  return {
-    isBot: score >= 40,
-    score: score,
-    reasons: reasons
-  };
+  return { isBot: score >= 40, score: score, reasons: reasons };
 }
 
 async function fetchTestCheckouts() {
