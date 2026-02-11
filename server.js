@@ -89,23 +89,33 @@ app.get('/api/stats', (req, res) => {
   res.json(stats);
 });
 
-app.post('/api/scan', async (req, res) => {
+aapp.post('/api/scan', async (req, res) => {
   try {
     console.log('=== Starting bot scan ===');
     
     let checkouts;
-    let shop = req.session.shop;
+    let shop = req.session.shop || 'eleven45ventures.myshopify.com'; // Default to your store
     let accessToken = req.session.accessToken;
     
     // Try to get stored token if not in session
-    if (!accessToken && shop) {
+    if (!accessToken) {
+      console.log('No token in session, checking storage...');
       accessToken = await getToken(shop);
+      if (accessToken) {
+        console.log('Found token in storage for:', shop);
+      }
     }
     
     if (accessToken && shop) {
       console.log('Fetching REAL checkouts from:', shop);
-      checkouts = await fetchAbandonedCheckouts(shop, accessToken);
-      console.log('Fetched', checkouts.length, 'real abandoned checkouts');
+      try {
+        checkouts = await fetchAbandonedCheckouts(shop, accessToken);
+        console.log('Fetched', checkouts.length, 'real abandoned checkouts');
+      } catch (error) {
+        console.error('Failed to fetch from Shopify:', error.message);
+        console.log('Falling back to test data');
+        checkouts = await fetchTestCheckouts();
+      }
     } else {
       console.log('No store connected - using test data');
       checkouts = await fetchTestCheckouts();
