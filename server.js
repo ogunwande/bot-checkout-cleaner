@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const session = require('express-session');
 const crypto = require('crypto');
+const fetch = require('node-fetch');
 const { saveToken, getToken } = require('./token-store');
 const { fetchAbandonedCheckouts, deleteCheckout } = require('./shopify-api');
 
