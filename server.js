@@ -89,7 +89,7 @@ app.get('/api/stats', (req, res) => {
   res.json(stats);
 });
 
-aapp.post('/api/scan', async (req, res) => {
+app.post('/api/scan', async (req, res) => {
   try {
     console.log('=== Starting bot scan ===');
     
