@@ -88,6 +88,26 @@ app.get('/', (req, res) => {
 app.get('/api/stats', (req, res) => {
   res.json(stats);
 });
+app.get('/api/stats', (req, res) => {
+  res.json(stats);
+});
+
+// ADD THIS NEW ENDPOINT
+app.get('/api/debug-tokens', async (req, res) => {
+  try {
+    const { getTokens } = require('./token-store');
+    const tokens = await getTokens();
+    res.json({
+      tokensFound: Object.keys(tokens).length,
+      shops: Object.keys(tokens),
+      hasEleven45: !!tokens['eleven45ventures.myshopify.com']
+    });
+  } catch (error) {
+    res.json({ error: error.message });
+  }
+});
+
+app.post('/api/scan', async (req, res) => {
 
 app.post('/api/scan', async (req, res) => {
   try {
