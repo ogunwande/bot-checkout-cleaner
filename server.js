@@ -39,7 +39,47 @@ app.get('/auth', (req, res) => {
   res.redirect(authUrl);
 });
 
+const { saveToken, getToken } = require('./token-store');
+const { fetchAbandonedCheckouts, deleteCheckout } = require('./shopify-api');
+
 app.get('/auth/callback', async (req, res) => {
+  const { code, state, shop } = req.query;
+  
+  if (state !== req.session.state) {
+    return res.status(403).send('Invalid state parameter');
+  }
+  
+  try {
+    const accessTokenUrl = `https://${shop}/admin/oauth/access_token`;
+    const response = await fetch(accessTokenUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        client_id: process.env.SHOPIFY_API_KEY,
+        client_secret: process.env.SHOPIFY_API_SECRET,
+        code: code
+      })
+    });
+
+    const data = await response.json();
+    
+    if (data.access_token) {
+      // SAVE THE TOKEN
+      await saveToken(shop, data.access_token);
+      
+      req.session.accessToken = data.access_token;
+      req.session.shop = shop;
+      
+      console.log('Successfully authenticated and saved token for:', shop);
+      res.redirect('/');
+    } else {
+      res.status(500).send('Failed to get access token');
+    }
+  } catch (error) {
+    console.error('OAuth error:', error);
+    res.status(500).send('Authentication failed: ' + error.message);
+  }
+});
   const { code, state, shop } = req.query;
   
   if (state !== req.session.state) {
@@ -78,7 +118,79 @@ app.get('/', (req, res) => {
   res.sendFile(__dirname + '/public/index.html');
 });
 
-app.get('/api/stats', (req, res) => {
+app.post('/api/scan', async (req, res) => {
+  try {
+    console.log('=== Starting bot scan ===');
+    
+    let checkouts;
+    let shop = req.session.shop;
+    let accessToken = req.session.accessToken;
+    
+    // Try to get stored token if not in session
+    if (!accessToken && shop) {
+      accessToken = await getToken(shop);
+    }
+    
+    if (accessToken && shop) {
+      console.log('Fetching REAL checkouts from:', shop);
+      checkouts = await fetchAbandonedCheckouts(shop, accessToken);
+      console.log('Fetched', checkouts.length, 'real abandoned checkouts');
+    } else {
+      console.log('No store connected - using test data');
+      checkouts = await fetchTestCheckouts();
+    }
+    
+    stats.totalScanned = checkouts.length;
+    let botsFound = 0;
+    let botsDeleted = 0;
+    
+    for (const checkout of checkouts) {
+      try {
+        const email = checkout.email || checkout.customer?.email;
+        console.log('Analyzing checkout:', email);
+        
+        const detection = await detectBot(checkout);
+        
+        console.log('Score:', detection.score, 'Is bot:', detection.isBot);
+        
+        if (detection.isBot && detection.score >= 70) {
+          botsFound++;
+          
+          // ACTUALLY DELETE THE CHECKOUT
+          if (accessToken && shop && checkout.token) {
+            const deleted = await deleteCheckout(shop, accessToken, checkout.token);
+            if (deleted) {
+              botsDeleted++;
+              console.log('✅ DELETED BOT:', email, 'Score:', detection.score);
+            }
+          } else {
+            console.log('🤖 BOT DETECTED (test mode):', email);
+          }
+        }
+      } catch (error) {
+        console.log('ERROR:', error.message);
+      }
+    }
+    
+    stats.botsDetected = botsFound;
+    stats.botsDeleted = botsDeleted;
+    stats.lastScan = new Date().toISOString();
+    
+    console.log('=== Scan complete ===');
+    console.log('Total scanned:', stats.totalScanned);
+    console.log('Bots found:', stats.botsDetected);
+    console.log('Bots deleted:', stats.botsDeleted);
+    
+    res.json({
+      success: true,
+      stats: stats
+    });
+    
+  } catch (error) {
+    console.error('Scan error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
   res.json(stats);
 });
 
