@@ -2,8 +2,7 @@ const fetch = require('node-fetch');
 
 // Fetch abandoned checkouts from Shopify
 async function fetchAbandonedCheckouts(shop, accessToken) {
-  // Use the correct API version and endpoint
-  const url = `https://${shop}/admin/api/2025-01/checkouts.json`;
+  const url = `https://${shop}/admin/api/2026-01/checkouts.json`;
   
   try {
     const response = await fetch(url, {
@@ -29,11 +28,13 @@ async function fetchAbandonedCheckouts(shop, accessToken) {
   }
 }
 
-// Delete a checkout from Shopify
-async function deleteCheckout(shop, accessToken, checkoutId) {
-  const url = `https://${shop}/admin/api/2025-01/checkouts/${checkoutId}.json`;
+// Delete bot customer from Shopify (THIS IS THE KEY CHANGE!)
+async function deleteCustomer(shop, accessToken, customerId) {
+  const url = `https://${shop}/admin/api/2026-01/customers/${customerId}.json`;
   
   try {
+    console.log('Attempting to delete customer:', customerId);
+    
     const response = await fetch(url, {
       method: 'DELETE',
       headers: {
@@ -44,19 +45,19 @@ async function deleteCheckout(shop, accessToken, checkoutId) {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('Delete error:', errorText);
-      throw new Error(`Failed to delete checkout: ${response.status}`);
+      console.error('Delete customer error:', errorText);
+      throw new Error(`Failed to delete customer: ${response.status} ${response.statusText}`);
     }
 
-    console.log('Deleted checkout:', checkoutId);
+    console.log('✅ Successfully deleted customer:', customerId);
     return true;
   } catch (error) {
-    console.error('Error deleting checkout:', error.message);
+    console.error('❌ Error deleting customer:', error.message);
     return false;
   }
 }
 
 module.exports = {
   fetchAbandonedCheckouts,
-  deleteCheckout
+  deleteCustomer
 };
