@@ -34,8 +34,8 @@ app.get('/auth', (req, res) => {
   
   const state = crypto.randomBytes(16).toString('hex');
   const redirectUri = `${process.env.APP_URL || 'http://localhost:3000'}/auth/callback`;
-  const authUrl = `https://${shop}/admin/oauth/authorize?client_id=${process.env.SHOPIFY_API_KEY}&scope=read_checkouts,write_checkouts&state=${state}&redirect_uri=${redirectUri}`;
-  
+ const authUrl = `https://${shop}/admin/oauth/authorize?client_id=${process.env.SHOPIFY_API_KEY}&scope=read_orders,write_orders&state=${state}&redirect_uri=${redirectUri}`;
+```
   req.session.state = state;
   req.session.shop = shop;
   
