@@ -4,7 +4,7 @@ const session = require('express-session');
 const crypto = require('crypto');
 const fetch = require('node-fetch');
 const { saveToken, getToken } = require('./token-store');
-const { fetchAbandonedCheckouts, deleteCheckout } = require('./shopify-api');
+const { fetchAbandonedCheckouts, deleteCustomer } = require('./shopify-api');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -34,8 +34,10 @@ app.get('/auth', (req, res) => {
   
   const state = crypto.randomBytes(16).toString('hex');
   const redirectUri = `${process.env.APP_URL || 'http://localhost:3000'}/auth/callback`;
- const authUrl = `https://${shop}/admin/oauth/authorize?client_id=${process.env.SHOPIFY_API_KEY}&scope=read_orders,write_orders&state=${state}&redirect_uri=${redirectUri}`;
-```
+  
+  // UPDATED SCOPES: read_orders + write_customers (to delete bot customers)
+  const authUrl = `https://${shop}/admin/oauth/authorize?client_id=${process.env.SHOPIFY_API_KEY}&scope=read_orders,write_customers&state=${state}&redirect_uri=${redirectUri}`;
+  
   req.session.state = state;
   req.session.shop = shop;
   
@@ -68,6 +70,7 @@ app.get('/auth/callback', async (req, res) => {
       req.session.accessToken = data.access_token;
       req.session.shop = shop;
       console.log('Token saved for:', shop);
+      console.log('ACCESS TOKEN:', data.access_token);
       res.redirect('/');
     } else {
       res.status(500).send('Failed to get access token');
@@ -106,10 +109,10 @@ app.post('/api/scan', async (req, res) => {
     
     let checkouts;
     let shop = req.session.shop || 'eleven45ventures.myshopify.com';
-    let accessToken = req.session.accessToken;
+    let accessToken = req.session.accessToken || process.env.SHOPIFY_ACCESS_TOKEN;
     
     if (!accessToken) {
-      console.log('No token in session, checking storage...');
+      console.log('No token in session or env, checking storage...');
       accessToken = await getToken(shop);
       if (accessToken) {
         console.log('Found token in storage for:', shop);
@@ -138,25 +141,35 @@ app.post('/api/scan', async (req, res) => {
     for (const checkout of checkouts) {
       try {
         const email = checkout.email || checkout.customer?.email;
-        console.log('Analyzing checkout:', email);
+        const customerId = checkout.customer?.id;
+        
+        console.log('Analyzing checkout:', email, '| Customer ID:', customerId);
         
         const detection = await detectBot(checkout);
         
-        console.log('Score:', detection.score, 'Is bot:', detection.isBot);
+        console.log('Bot Score:', detection.score, '| Is Bot:', detection.isBot);
+        console.log('Reasons:', detection.reasons.join(', '));
         
         if (detection.isBot && detection.score >= 70) {
           botsFound++;
           
-          if (accessToken && shop && checkout.token) {
-            const deleted = await deleteCheckout(shop, accessToken, checkout.token);
+          // DELETE THE BOT CUSTOMER (not the checkout!)
+          if (accessToken && shop && customerId) {
+            console.log('🤖 BOT DETECTED - Attempting to delete customer...');
+            const deleted = await deleteCustomer(shop, accessToken, customerId);
             if (deleted) {
               botsDeleted++;
-              console.log('✅ DELETED BOT:', email, 'Score:', detection.score);
+              console.log('✅ DELETED BOT CUSTOMER:', email, '| Score:', detection.score);
+            } else {
+              console.log('❌ Failed to delete customer:', email);
             }
           } else {
-            console.log('🤖 BOT DETECTED (test mode):', email);
+            console.log('🤖 BOT DETECTED (test mode - not deleting):', email);
           }
+        } else {
+          console.log('✅ Clean checkout:', email);
         }
+        console.log('---');
       } catch (error) {
         console.log('ERROR:', error.message);
       }
@@ -169,7 +182,7 @@ app.post('/api/scan', async (req, res) => {
     console.log('=== Scan complete ===');
     console.log('Total scanned:', stats.totalScanned);
     console.log('Bots found:', stats.botsDetected);
-    console.log('Bots deleted:', stats.botsDeleted);
+    console.log('Bot customers deleted:', stats.botsDeleted);
     
     res.json({
       success: true,
@@ -191,27 +204,34 @@ async function detectBot(checkout) {
   const lastName = checkout.customer?.last_name || '';
   const address = checkout.shipping_address?.address1 || '';
 
+  // Email pattern checks
   if (/\d{3,}@/.test(email)) {
     score += 30;
-    reasons.push('Email numbers');
+    reasons.push('Email has 3+ consecutive numbers');
   }
   
   if (/^[a-z]+\d+@gmail\.com$/i.test(email)) {
     score += 25;
-    reasons.push('Gmail pattern');
+    reasons.push('Generic Gmail pattern (name+numbers)');
   }
 
+  // Name pattern checks
   if (/\d/.test(firstName) || /\d/.test(lastName)) {
     score += 20;
-    reasons.push('Name numbers');
+    reasons.push('Name contains numbers');
   }
 
+  // Address pattern checks
   if (/house number|apartment|apt \d+|street \d+/i.test(address)) {
     score += 15;
-    reasons.push('Generic address');
+    reasons.push('Generic/templated address');
   }
 
-  return { isBot: score >= 40, score: score, reasons: reasons };
+  return { 
+    isBot: score >= 40, 
+    score: score, 
+    reasons: reasons 
+  };
 }
 
 async function fetchTestCheckouts() {
@@ -220,6 +240,7 @@ async function fetchTestCheckouts() {
       id: 1,
       email: 'john.doe@example.com',
       customer: {
+        id: 12345,
         first_name: 'John',
         last_name: 'Doe',
         email: 'john.doe@example.com'
@@ -236,6 +257,7 @@ async function fetchTestCheckouts() {
       id: 2,
       email: 'allen690@gmail.com',
       customer: {
+        id: 67890,
         first_name: 'Allen',
         last_name: '690',
         email: 'allen690@gmail.com'
