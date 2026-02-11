@@ -1,3 +1,4 @@
+const fetch = require('node-fetch');
 // Fetch abandoned checkouts from Shopify
 async function fetchAbandonedCheckouts(shop, accessToken) {
   const url = `https://${shop}/admin/api/2024-01/checkouts.json?status=open`;
