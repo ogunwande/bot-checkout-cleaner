@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const session = require('express-session');
+const { buildAuthUrl, getAccessToken, fetchAbandonedCheckoutsFromShopify, deleteCheckoutFromShopify } = require('./shopify-auth');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -10,7 +11,8 @@ app.use(express.static('public'));
 app.use(session({
   secret: process.env.SHOPIFY_API_SECRET || 'default-secret',
   resave: false,
-  saveUninitialized: false
+  saveUninitialized: false,
+  cookie: { secure: false }
 }));
 
 let stats = {
@@ -19,6 +21,44 @@ let stats = {
   botsDeleted: 0,
   lastScan: null
 };
+
+app.get('/auth', (req, res) => {
+  const shop = req.query.shop;
+  
+  if (!shop) {
+    return res.status(400).send('Missing shop parameter. Use: /auth?shop=yourstore.myshopify.com');
+  }
+  
+  const redirectUri = `${process.env.APP_URL || 'http://localhost:3000'}/auth/callback`;
+  const { authUrl, state } = buildAuthUrl(shop, redirectUri);
+  
+  req.session.state = state;
+  req.session.shop = shop;
+  
+  res.redirect(authUrl);
+});
+
+app.get('/auth/callback', async (req, res) => {
+  const { code, state, shop } = req.query;
+  
+  if (state !== req.session.state) {
+    return res.status(403).send('Invalid state parameter');
+  }
+  
+  try {
+    const accessToken = await getAccessToken(shop, code);
+    
+    req.session.accessToken = accessToken;
+    req.session.shop = shop;
+    
+    console.log('Successfully authenticated store:', shop);
+    
+    res.redirect('/');
+  } catch (error) {
+    console.error('OAuth error:', error);
+    res.status(500).send('Authentication failed: ' + error.message);
+  }
+});
 
 app.get('/', (req, res) => {
   res.sendFile(__dirname + '/public/index.html');
@@ -33,7 +73,17 @@ app.post('/api/scan', async (req, res) => {
     console.log('=== Starting bot scan ===');
     
     const { detectBot } = require('./bot-detector');
-    const checkouts = await fetchAbandonedCheckouts();
+    
+    let checkouts;
+    
+    if (req.session.accessToken && req.session.shop) {
+      console.log('Fetching real checkouts from:', req.session.shop);
+      checkouts = await fetchAbandonedCheckoutsFromShopify(req.session.shop, req.session.accessToken);
+      console.log('Fetched', checkouts.length, 'real checkouts from Shopify');
+    } else {
+      console.log('No store connected - using test data');
+      checkouts = await fetchTestCheckouts();
+    }
     
     stats.totalScanned = checkouts.length;
     let botsFound = 0;
@@ -41,7 +91,7 @@ app.post('/api/scan', async (req, res) => {
     
     for (const checkout of checkouts) {
       try {
-        console.log('Checkout email:', checkout.customer?.email);
+        console.log('Checkout email:', checkout.customer?.email || checkout.email);
         
         const detection = await detectBot(checkout);
         
@@ -53,10 +103,10 @@ app.post('/api/scan', async (req, res) => {
         if (detection.isBot && detection.score >= 70) {
           botsFound++;
           botsDeleted++;
-          console.log('DELETED BOT:', checkout.customer?.email, 'Score:', detection.score);
+          console.log('DELETED BOT:', checkout.customer?.email || checkout.email, 'Score:', detection.score);
         }
       } catch (error) {
-        console.log('ERROR analyzing checkout:', checkout.customer?.email);
+        console.log('ERROR analyzing checkout:', checkout.customer?.email || checkout.email);
         console.log('Error:', error.message);
       }
     }
@@ -81,7 +131,7 @@ app.post('/api/scan', async (req, res) => {
   }
 });
 
-async function fetchAbandonedCheckouts() {
+async function fetchTestCheckouts() {
   return [
     {
       id: 1,
@@ -122,3 +172,4 @@ async function fetchAbandonedCheckouts() {
 app.listen(PORT, () => {
   console.log('Bot Checkout Cleaner running on port', PORT);
 });
+```
