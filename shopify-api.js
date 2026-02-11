@@ -1,14 +1,12 @@
 const fetch = require('node-fetch');
 
-// Fetch customers using GraphQL (then check for abandoned checkouts)
+// Fetch customers with 0 orders (abandoned/bot customers)
 async function fetchAbandonedCheckouts(shop, accessToken) {
   const url = `https://${shop}/admin/api/2026-01/graphql.json`;
   
-  // Query customers who have abandoned checkouts
-  // We'll get customers and check their order history
   const query = `
-    query GetCustomers {
-      customers(first: 250, query: "state:disabled OR state:enabled") {
+    {
+      customers(first: 100) {
         edges {
           node {
             id
@@ -22,14 +20,9 @@ async function fetchAbandonedCheckouts(shop, accessToken) {
               city
               province
               zip
-              country
             }
             createdAt
-            updatedAt
           }
-        }
-        pageInfo {
-          hasNextPage
         }
       }
     }
@@ -47,63 +40,72 @@ async function fetchAbandonedCheckouts(shop, accessToken) {
       body: JSON.stringify({ query })
     });
 
+    const text = await response.text();
+    console.log('Raw API Response:', text);
+
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('GraphQL API Error Response:', errorText);
-      throw new Error(`Shopify GraphQL API error: ${response.status} ${response.statusText}`);
+      console.error('API Error Status:', response.status);
+      throw new Error(`API error: ${response.status}`);
     }
 
-    const data = await response.json();
+    const data = JSON.parse(text);
     
     if (data.errors) {
-      console.error('GraphQL Errors:', JSON.stringify(data.errors, null, 2));
-      throw new Error('GraphQL query failed: ' + data.errors[0].message);
+      console.error('GraphQL Errors:', data.errors);
+      throw new Error('GraphQL failed: ' + data.errors[0].message);
     }
     
-    // Transform to checkout-like format
-    const customers = data.data.customers.edges.map(edge => {
+    if (!data.data || !data.data.customers) {
+      console.error('Unexpected response structure:', data);
+      throw new Error('No customers data in response');
+    }
+    
+    const allCustomers = data.data.customers.edges || [];
+    console.log('Total customers found:', allCustomers.length);
+    
+    // Convert to our format
+    const customers = allCustomers.map(edge => {
       const node = edge.node;
-      const customerId = node.id.split('/').pop();
+      const idParts = node.id.split('/');
+      const numericId = idParts[idParts.length - 1];
       
       return {
-        id: customerId,
-        email: node.email,
+        id: numericId,
+        email: node.email || '',
         customer: {
-          id: customerId,
-          email: node.email,
-          first_name: node.firstName,
-          last_name: node.lastName,
-          orders_count: node.ordersCount
+          id: numericId,
+          email: node.email || '',
+          first_name: node.firstName || '',
+          last_name: node.lastName || '',
+          orders_count: node.ordersCount || 0
         },
-        shipping_address: node.defaultAddress,
-        created_at: node.createdAt,
-        updated_at: node.updatedAt
+        shipping_address: node.defaultAddress || {},
+        created_at: node.createdAt
       };
     });
     
-    // Filter for potential bot customers (those with 0 orders - never completed purchase)
-    const suspiciousCustomers = customers.filter(c => c.customer.orders_count === 0);
+    // Filter to only those with 0 orders
+    const noOrders = customers.filter(c => c.customer.orders_count === 0);
     
-    console.log('✅ Found', customers.length, 'total customers');
-    console.log('⚠️ Found', suspiciousCustomers.length, 'customers with 0 orders (potential bots)');
+    console.log('Customers with 0 orders:', noOrders.length);
     
-    return suspiciousCustomers;
+    return noOrders;
     
   } catch (error) {
-    console.error('❌ Error fetching customers:', error.message);
+    console.error('Error in fetchAbandonedCheckouts:', error);
     throw error;
   }
 }
 
-// Delete customer using GraphQL
+// Delete customer
 async function deleteCustomer(shop, accessToken, customerId) {
   const url = `https://${shop}/admin/api/2026-01/graphql.json`;
   
-  const customerGid = `gid://shopify/Customer/${customerId}`;
+  const gid = `gid://shopify/Customer/${customerId}`;
   
   const mutation = `
-    mutation DeleteCustomer($id: ID!) {
-      customerDelete(input: {id: $id}) {
+    mutation {
+      customerDelete(input: {id: "${gid}"}) {
         deletedCustomerId
         userErrors {
           field
@@ -113,12 +115,8 @@ async function deleteCustomer(shop, accessToken, customerId) {
     }
   `;
   
-  const variables = {
-    id: customerGid
-  };
-  
   try {
-    console.log('🗑️ Attempting to delete customer via GraphQL:', customerId);
+    console.log('Deleting customer:', customerId);
     
     const response = await fetch(url, {
       method: 'POST',
@@ -126,42 +124,41 @@ async function deleteCustomer(shop, accessToken, customerId) {
         'X-Shopify-Access-Token': accessToken,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ 
-        query: mutation,
-        variables: variables
-      })
+      body: JSON.stringify({ query: mutation })
     });
 
+    const text = await response.text();
+    console.log('Delete response:', text);
+
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('GraphQL delete error response:', errorText);
-      throw new Error(`Failed to delete customer: ${response.status} ${response.statusText}`);
+      return false;
     }
 
-    const data = await response.json();
+    const data = JSON.parse(text);
     
     if (data.errors) {
-      console.error('GraphQL Errors:', JSON.stringify(data.errors, null, 2));
+      console.error('Delete errors:', data.errors);
       return false;
     }
     
-    const userErrors = data.data.customerDelete.userErrors;
-    if (userErrors && userErrors.length > 0) {
-      console.error('❌ User Errors:', JSON.stringify(userErrors, null, 2));
-      return false;
+    if (data.data && data.data.customerDelete) {
+      const result = data.data.customerDelete;
+      
+      if (result.userErrors && result.userErrors.length > 0) {
+        console.error('User errors:', result.userErrors);
+        return false;
+      }
+      
+      if (result.deletedCustomerId) {
+        console.log('Successfully deleted:', customerId);
+        return true;
+      }
     }
-
-    const deletedId = data.data.customerDelete.deletedCustomerId;
-    if (deletedId) {
-      console.log('✅ Successfully deleted customer:', customerId);
-      return true;
-    } else {
-      console.log('⚠️ Delete mutation returned no error but also no deleted ID');
-      return false;
-    }
+    
+    return false;
     
   } catch (error) {
-    console.error('❌ Error deleting customer:', error.message);
+    console.error('Error deleting customer:', error);
     return false;
   }
 }
@@ -170,32 +167,3 @@ module.exports = {
   fetchAbandonedCheckouts,
   deleteCustomer
 };
-```
-
----
-
-## **Key Changes:**
-
-1. **Queries `customers` instead of `checkouts`** (checkouts field was removed by Shopify)
-2. **Filters for customers with 0 orders** (these are abandoned - never completed purchase)
-3. **Still detects bot patterns** in customer data
-4. **Deletes bot customers** from the database
-
----
-
-## **Deploy This:**
-
-1. Replace your `shopify-api.js` with the code above
-2. Keep your `server.js` as is (no changes needed)
-3. Commit to GitHub
-4. Wait for Railway to redeploy
-5. Run scan again
-
----
-
-## **What Should Happen:**
-
-After deploying, the logs should show:
-```
-✅ Found X total customers
-⚠️ Found Y customers with 0 orders (potential bots)
