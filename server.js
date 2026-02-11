@@ -2,6 +2,8 @@ require('dotenv').config();
 const express = require('express');
 const session = require('express-session');
 const crypto = require('crypto');
+const { saveToken, getToken } = require('./token-store');
+const { fetchAbandonedCheckouts, deleteCheckout } = require('./shopify-api');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -38,9 +40,6 @@ app.get('/auth', (req, res) => {
   
   res.redirect(authUrl);
 });
-
-const { saveToken, getToken } = require('./token-store');
-const { fetchAbandonedCheckouts, deleteCheckout } = require('./shopify-api');
 
 app.get('/auth/callback', async (req, res) => {
   const { code, state, shop } = req.query;
@@ -80,42 +79,13 @@ app.get('/auth/callback', async (req, res) => {
     res.status(500).send('Authentication failed: ' + error.message);
   }
 });
-  const { code, state, shop } = req.query;
-  
-  if (state !== req.session.state) {
-    return res.status(403).send('Invalid state parameter');
-  }
-  
-  try {
-    const accessTokenUrl = `https://${shop}/admin/oauth/access_token`;
-    const response = await fetch(accessTokenUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        client_id: process.env.SHOPIFY_API_KEY,
-        client_secret: process.env.SHOPIFY_API_SECRET,
-        code: code
-      })
-    });
-
-    const data = await response.json();
-    
-    if (data.access_token) {
-      req.session.accessToken = data.access_token;
-      req.session.shop = shop;
-      console.log('Successfully authenticated store:', shop);
-      res.redirect('/');
-    } else {
-      res.status(500).send('Failed to get access token');
-    }
-  } catch (error) {
-    console.error('OAuth error:', error);
-    res.status(500).send('Authentication failed: ' + error.message);
-  }
-});
 
 app.get('/', (req, res) => {
   res.sendFile(__dirname + '/public/index.html');
+});
+
+app.get('/api/stats', (req, res) => {
+  res.json(stats);
 });
 
 app.post('/api/scan', async (req, res) => {
@@ -169,60 +139,6 @@ app.post('/api/scan', async (req, res) => {
         }
       } catch (error) {
         console.log('ERROR:', error.message);
-      }
-    }
-    
-    stats.botsDetected = botsFound;
-    stats.botsDeleted = botsDeleted;
-    stats.lastScan = new Date().toISOString();
-    
-    console.log('=== Scan complete ===');
-    console.log('Total scanned:', stats.totalScanned);
-    console.log('Bots found:', stats.botsDetected);
-    console.log('Bots deleted:', stats.botsDeleted);
-    
-    res.json({
-      success: true,
-      stats: stats
-    });
-    
-  } catch (error) {
-    console.error('Scan error:', error.message);
-    res.status(500).json({ error: error.message });
-  }
-});
-  res.json(stats);
-});
-
-app.post('/api/scan', async (req, res) => {
-  try {
-    console.log('=== Starting bot scan ===');
-    
-    const checkouts = await fetchTestCheckouts();
-    
-    stats.totalScanned = checkouts.length;
-    let botsFound = 0;
-    let botsDeleted = 0;
-    
-    for (const checkout of checkouts) {
-      try {
-        console.log('Checkout email:', checkout.customer?.email || checkout.email);
-        
-        const detection = await detectBot(checkout);
-        
-        console.log('Score:', detection.score);
-        console.log('Is bot:', detection.isBot);
-        console.log('Reasons:', detection.reasons.join(', '));
-        console.log('---');
-        
-        if (detection.isBot && detection.score >= 70) {
-          botsFound++;
-          botsDeleted++;
-          console.log('DELETED BOT:', checkout.customer?.email || checkout.email, 'Score:', detection.score);
-        }
-      } catch (error) {
-        console.log('ERROR analyzing checkout:', checkout.customer?.email || checkout.email);
-        console.log('Error:', error.message);
       }
     }
     
