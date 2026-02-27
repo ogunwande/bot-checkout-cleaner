@@ -13,7 +13,7 @@ async function fetchAbandonedCheckouts(shop, accessToken) {
             email
             firstName
             lastName
-            ordersCount
+            numberOfOrders
             defaultAddress {
               address1
               address2
@@ -41,7 +41,7 @@ async function fetchAbandonedCheckouts(shop, accessToken) {
     });
 
     const text = await response.text();
-    console.log('Raw API Response:', text);
+    console.log('Raw API Response:', text.substring(0, 200));
 
     if (!response.ok) {
       console.error('API Error Status:', response.status);
@@ -61,7 +61,7 @@ async function fetchAbandonedCheckouts(shop, accessToken) {
     }
     
     const allCustomers = data.data.customers.edges || [];
-    console.log('Total customers found:', allCustomers.length);
+    console.log('✅ Total customers found:', allCustomers.length);
     
     // Convert to our format
     const customers = allCustomers.map(edge => {
@@ -77,7 +77,7 @@ async function fetchAbandonedCheckouts(shop, accessToken) {
           email: node.email || '',
           first_name: node.firstName || '',
           last_name: node.lastName || '',
-          orders_count: node.ordersCount || 0
+          orders_count: node.numberOfOrders || 0
         },
         shipping_address: node.defaultAddress || {},
         created_at: node.createdAt
@@ -87,12 +87,12 @@ async function fetchAbandonedCheckouts(shop, accessToken) {
     // Filter to only those with 0 orders
     const noOrders = customers.filter(c => c.customer.orders_count === 0);
     
-    console.log('Customers with 0 orders:', noOrders.length);
+    console.log('⚠️ Customers with 0 orders (potential bots):', noOrders.length);
     
     return noOrders;
     
   } catch (error) {
-    console.error('Error in fetchAbandonedCheckouts:', error);
+    console.error('❌ Error in fetchAbandonedCheckouts:', error.message);
     throw error;
   }
 }
@@ -116,7 +116,7 @@ async function deleteCustomer(shop, accessToken, customerId) {
   `;
   
   try {
-    console.log('Deleting customer:', customerId);
+    console.log('🗑️ Deleting customer:', customerId);
     
     const response = await fetch(url, {
       method: 'POST',
@@ -128,16 +128,15 @@ async function deleteCustomer(shop, accessToken, customerId) {
     });
 
     const text = await response.text();
-    console.log('Delete response:', text);
+    const data = JSON.parse(text);
 
     if (!response.ok) {
+      console.error('Delete failed - Status:', response.status);
       return false;
     }
 
-    const data = JSON.parse(text);
-    
     if (data.errors) {
-      console.error('Delete errors:', data.errors);
+      console.error('❌ GraphQL Errors:', data.errors);
       return false;
     }
     
@@ -145,12 +144,12 @@ async function deleteCustomer(shop, accessToken, customerId) {
       const result = data.data.customerDelete;
       
       if (result.userErrors && result.userErrors.length > 0) {
-        console.error('User errors:', result.userErrors);
+        console.error('❌ User errors:', result.userErrors[0].message);
         return false;
       }
       
       if (result.deletedCustomerId) {
-        console.log('Successfully deleted:', customerId);
+        console.log('✅ Successfully deleted customer:', customerId);
         return true;
       }
     }
@@ -158,7 +157,7 @@ async function deleteCustomer(shop, accessToken, customerId) {
     return false;
     
   } catch (error) {
-    console.error('Error deleting customer:', error);
+    console.error('❌ Error deleting customer:', error.message);
     return false;
   }
 }
